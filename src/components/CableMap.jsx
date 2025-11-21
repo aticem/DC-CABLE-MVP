@@ -332,7 +332,7 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
     layer.bindTooltip(
       `<div style="transform: rotate(${angle.toFixed(2)}deg); transform-origin: center;">${id}</div>`,
       { 
-        permanent: false, 
+        permanent: true, 
         direction: "center", 
         className: "table-label" 
       }
