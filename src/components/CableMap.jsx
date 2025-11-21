@@ -78,8 +78,108 @@ function ZoomHandler() {
   return null;
 }
 
+/* ---------- Box Selection ---------- */
+function BoxSelection({ data, onSelect, onDeselect }) {
+  const map = useMap();
+  const [box, setBox] = useState(null);
+  const startRef = useRef(null);
+  const modeRef = useRef(null); // 'select' | 'deselect'
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    const container = map.getContainer();
+
+    const onMouseDown = (e) => {
+      // Left (0) or Right (2)
+      if (e.button !== 0 && e.button !== 2) return;
+      
+      startRef.current = map.mouseEventToContainerPoint(e);
+      modeRef.current = e.button === 0 ? 'select' : 'deselect';
+      boxRef.current = null;
+      setBox(null);
+    };
+
+    const onMouseMove = (e) => {
+      if (!startRef.current) return;
+
+      const current = map.mouseEventToContainerPoint(e);
+      const dx = current.x - startRef.current.x;
+      const dy = current.y - startRef.current.y;
+
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        const x = Math.min(startRef.current.x, current.x);
+        const y = Math.min(startRef.current.y, current.y);
+        const width = Math.abs(dx);
+        const height = Math.abs(dy);
+        
+        const newBox = { x, y, width, height, mode: modeRef.current };
+        setBox(newBox);
+        boxRef.current = newBox;
+      }
+    };
+
+    const onMouseUp = (e) => {
+      if (!startRef.current) return;
+
+      if (boxRef.current) {
+        const b = boxRef.current;
+        const p1 = map.containerPointToLatLng([b.x, b.y]);
+        const p2 = map.containerPointToLatLng([b.x + b.width, b.y + b.height]);
+        const bounds = L.latLngBounds(p1, p2);
+
+        const ids = [];
+        if (data && data.features) {
+          data.features.forEach(f => {
+             try {
+               const layer = L.GeoJSON.geometryToLayer(f);
+               if (bounds.intersects(layer.getBounds())) {
+                 if (f.properties?.string_id) ids.push(f.properties.string_id);
+               }
+             } catch (err) {
+               // ignore
+             }
+          });
+        }
+
+        if (modeRef.current === 'select') onSelect(ids);
+        else onDeselect(ids);
+      }
+
+      startRef.current = null;
+      modeRef.current = null;
+      boxRef.current = null;
+      setBox(null);
+    };
+
+    container.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      container.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [map, data, onSelect, onDeselect]);
+
+  if (!box) return null;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      left: box.x,
+      top: box.y,
+      width: box.width,
+      height: box.height,
+      border: `2px solid ${box.mode === 'select' ? '#22c55e' : '#ef4444'}`,
+      backgroundColor: box.mode === 'select' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+      zIndex: 2000,
+      pointerEvents: 'none'
+    }} />
+  );
+}
+
 export default function CableMap({ data, plusMap, minusMap, selected, setSelected }) {
-  const paintModeRef = useRef(null); // 'add' | 'erase' | null
   const [, _force] = useState(false);
   const setIsDragging = (v) => _force(v);
 
@@ -98,6 +198,30 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
     setSelected(s); 
   };
 
+  const addIds = (ids) => {
+    const s = new Set(selected);
+    let changed = false;
+    ids.forEach(id => {
+      if (!s.has(id)) {
+        s.add(id);
+        changed = true;
+      }
+    });
+    if (changed) setSelected(s);
+  };
+
+  const removeIds = (ids) => {
+    const s = new Set(selected);
+    let changed = false;
+    ids.forEach(id => {
+      if (s.has(id)) {
+        s.delete(id);
+        changed = true;
+      }
+    });
+    if (changed) setSelected(s);
+  };
+
   const hasAny = (id) => {
     const p = plusMap[id], m = minusMap[id];
     return p != null || m != null;
@@ -107,15 +231,11 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
   const style = (f) => {
     const id = f.properties?.string_id;
     const isSel = selected.has(id);
-    const found = hasAny(id);
     let color = "#374151";
     let fillColor = "#374151";
-    if (isSel && found) {
+    if (isSel) {
       color = "#22c55e";
       fillColor = "#22c55e";
-    } else if (isSel && !found) {
-      color = "#f59e0b";
-      fillColor = "#f59e0b";
     }
     return { color, fillColor, weight: isSel ? 3 : 1, fillOpacity: isSel ? 0.8 : 0.6, pane: "overlayPane" };
   };
@@ -170,43 +290,18 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
       }
     );
 
-    layer.on("mousedown", (e) => {
+    layer.on("click", (e) => {
       if (e.originalEvent.button === 0) {
-        paintModeRef.current = "add";
+        addId(id);
         L.DomEvent.stopPropagation(e);
-      }
-    });
-
-    layer.on("mouseup", (e) => {
-      if (e.originalEvent.button === 0) {
-        paintModeRef.current = null;
       }
     });
 
     layer.on("contextmenu", (e) => {
       if (e.originalEvent.button === 2) {
-        paintModeRef.current = "erase";
-        if (selected.has(id)) removeId(id);
+        removeId(id);
         L.DomEvent.preventDefault(e);
         L.DomEvent.stopPropagation(e);
-      }
-    });
-
-    layer.on("mouseover", (e) => {
-      if (paintModeRef.current === "add" && !selected.has(id)) addId(id);
-      else if (paintModeRef.current === "erase" && e.originalEvent.buttons === 2 && selected.has(id)) removeId(id);
-    });
-
-    layer.on("click", (e) => {
-      if (e.originalEvent.button === 0 && paintModeRef.current !== "add") {
-        addId(id);
-      }
-      L.DomEvent.stopPropagation(e);
-    });
-
-    layer.on("contextmenu", (e) => {
-      if (paintModeRef.current !== "erase" && selected.has(id)) {
-        removeId(id);
       }
     });
   };
@@ -215,21 +310,13 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
   const MouseMode = () => {
     const map = useMap();
     useEffect(() => {
+      // Ensure dragging is disabled (fix for previous component cleanup re-enabling it)
       map.dragging.disable();
-      const up = () => { paintModeRef.current = null; };
-      map.on("mouseup", up);
-      map.on("contextmenu", (e) => L.DomEvent.preventDefault(e));
-
-      map.on("mousedown", (e) => {
-        if (e.originalEvent.button === 2) {
-          paintModeRef.current = "erase";
-        }
-      });
-
+      
+      const preventCtx = (e) => L.DomEvent.preventDefault(e);
+      map.on("contextmenu", preventCtx);
       return () => {
-        map.dragging.enable();
-        map.off("mouseup", up);
-        map.off("mousedown");
+        map.off("contextmenu", preventCtx);
       };
     }, [map]);
     return null;
@@ -258,6 +345,7 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
       <FitToData data={data} />
       <InteractionManager setIsDragging={setIsDragging} />
       <MouseMode />
+      <BoxSelection data={data} onSelect={addIds} onDeselect={removeIds} />
       <ZoomHandler />
       <GeoJSON data={data} style={style} onEachFeature={onEach} smoothFactor={0} key={`${selected.size}-${Object.keys(plusMap).length}`} />
     </MapContainer>
