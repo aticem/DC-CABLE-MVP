@@ -79,7 +79,7 @@ function ZoomHandler() {
 }
 
 /* ---------- Box Selection ---------- */
-function BoxSelection({ data, onSelect, onDeselect }) {
+function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
   const map = useMap();
   const [box, setBox] = useState(null);
   const startRef = useRef(null);
@@ -121,25 +121,20 @@ function BoxSelection({ data, onSelect, onDeselect }) {
     const onMouseUp = (e) => {
       if (!startRef.current) return;
 
-      if (boxRef.current) {
+      if (boxRef.current && geoJsonRef.current) {
         const b = boxRef.current;
         const p1 = map.containerPointToLatLng([b.x, b.y]);
         const p2 = map.containerPointToLatLng([b.x + b.width, b.y + b.height]);
         const bounds = L.latLngBounds(p1, p2);
 
         const ids = [];
-        if (data && data.features) {
-          data.features.forEach(f => {
-             try {
-               const layer = L.GeoJSON.geometryToLayer(f);
-               if (bounds.intersects(layer.getBounds())) {
-                 if (f.properties?.string_id) ids.push(f.properties.string_id);
-               }
-             } catch (err) {
-               // ignore
+        geoJsonRef.current.eachLayer((layer) => {
+          if (layer.feature && layer.feature.properties?.string_id) {
+             if (bounds.intersects(layer.getBounds())) {
+               ids.push(layer.feature.properties.string_id);
              }
-          });
-        }
+          }
+        });
 
         if (modeRef.current === 'select') onSelect(ids);
         else onDeselect(ids);
@@ -160,7 +155,7 @@ function BoxSelection({ data, onSelect, onDeselect }) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [map, data, onSelect, onDeselect]);
+  }, [map, geoJsonRef, onSelect, onDeselect]);
 
   if (!box) return null;
 
@@ -182,6 +177,7 @@ function BoxSelection({ data, onSelect, onDeselect }) {
 export default function CableMap({ data, plusMap, minusMap, selected, setSelected }) {
   const [, _force] = useState(false);
   const setIsDragging = (v) => _force(v);
+  const geoJsonRef = useRef(null);
 
   /* yardımcılar */
   const addId = (id) => { 
@@ -240,6 +236,21 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
     return { color, fillColor, weight: isSel ? 3 : 1, fillOpacity: isSel ? 0.8 : 0.6, pane: "overlayPane" };
   };
 
+  // Update styles imperatively when selection changes
+  useEffect(() => {
+    if (!geoJsonRef.current) return;
+    geoJsonRef.current.eachLayer((layer) => {
+      const feature = layer.feature;
+      if (feature) {
+        const newStyle = style(feature);
+        layer.setStyle(newStyle);
+        if (newStyle.weight === 3) {
+            layer.bringToFront();
+        }
+      }
+    });
+  }, [selected, plusMap, minusMap]);
+
   /* layer event’leri */
   const onEach = (feature, layer) => {
     const id = feature.properties?.string_id || "No ID";
@@ -284,7 +295,7 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
     layer.bindTooltip(
       `<div style="transform: rotate(${angle.toFixed(2)}deg); transform-origin: center;">${id}</div>`,
       { 
-        permanent: true, 
+        permanent: false, 
         direction: "center", 
         className: "table-label" 
       }
@@ -345,9 +356,9 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
       <FitToData data={data} />
       <InteractionManager setIsDragging={setIsDragging} />
       <MouseMode />
-      <BoxSelection data={data} onSelect={addIds} onDeselect={removeIds} />
+      <BoxSelection geoJsonRef={geoJsonRef} onSelect={addIds} onDeselect={removeIds} />
       <ZoomHandler />
-      <GeoJSON data={data} style={style} onEachFeature={onEach} smoothFactor={0} key={`${selected.size}-${Object.keys(plusMap).length}`} />
+      <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} />
     </MapContainer>
   );
 }
