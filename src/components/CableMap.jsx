@@ -181,41 +181,51 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
 
   /* yardımcılar */
   const addId = (id) => { 
-    if (!id || selected.has(id)) return; 
-    const s = new Set(selected); 
-    s.add(id); 
-    setSelected(s); 
+    if (!id) return; 
+    setSelected(prev => {
+      if (prev.has(id)) return prev;
+      const s = new Set(prev);
+      s.add(id);
+      return s;
+    });
   };
   
   const removeId = (id) => { 
-    if (!id || !selected.has(id)) return; 
-    const s = new Set(selected); 
-    s.delete(id); 
-    setSelected(s); 
+    if (!id) return; 
+    setSelected(prev => {
+      if (!prev.has(id)) return prev;
+      const s = new Set(prev);
+      s.delete(id);
+      return s;
+    });
   };
 
   const addIds = (ids) => {
-    const s = new Set(selected);
-    let changed = false;
-    ids.forEach(id => {
-      if (!s.has(id)) {
-        s.add(id);
-        changed = true;
-      }
+    setSelected(prev => {
+      const s = new Set(prev);
+      let changed = false;
+      ids.forEach(id => {
+        if (!s.has(id)) {
+          s.add(id);
+          changed = true;
+        }
+      });
+      return changed ? s : prev;
     });
-    if (changed) setSelected(s);
   };
 
   const removeIds = (ids) => {
-    const s = new Set(selected);
-    let changed = false;
-    ids.forEach(id => {
-      if (s.has(id)) {
-        s.delete(id);
-        changed = true;
-      }
+    setSelected(prev => {
+      const s = new Set(prev);
+      let changed = false;
+      ids.forEach(id => {
+        if (s.has(id)) {
+          s.delete(id);
+          changed = true;
+        }
+      });
+      return changed ? s : prev;
     });
-    if (changed) setSelected(s);
   };
 
   const hasAny = (id) => {
