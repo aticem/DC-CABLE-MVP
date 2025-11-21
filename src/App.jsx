@@ -372,41 +372,55 @@ export default function App() {
   if (!data) return <div style={{ padding:16 }}>Loading map…</div>;
 
   return (
-    <div style={{ height: "100vh", position: "relative" }}>
-      {/* ÜST HUD */}
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0b1020" }}>
+      {/* HEADER */}
       <div style={{
-        position: "absolute", top: 10, left: 10, right: 10, zIndex: 1000,
-        display: "flex", gap: 16, justifyContent: "center", pointerEvents: "none"
+        height: "60px", background: "#0f172a", display: "flex", alignItems: "center",
+        padding: "0 24px", justifyContent: "space-between", color: "white",
+        borderBottom: "1px solid #1e293b", zIndex: 2000, position: "relative"
       }}>
-        <div style={{
-          background: "rgba(15,23,42,0.9)", color: "#fff", padding: "8px 12px",
-          borderRadius: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.25)", fontWeight: 700, pointerEvents: "auto"
-        }}>
-          + DC cable: {totalPlus.toFixed(2)} m
+        {/* LEFT: Stats + Reset */}
+        <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+           <div style={{
+             display: "flex", alignItems: "center", gap: "8px",
+             background: "#1e293b", padding: "6px 12px", borderRadius: "6px", border: "1px solid #334155", fontSize: "0.9rem", fontWeight: 600
+           }}>
+             <span style={{ color: "#94a3b8" }}>+ DC:</span>
+             <span>{totalPlus.toFixed(2)} m</span>
+           </div>
+           <div style={{
+             display: "flex", alignItems: "center", gap: "8px",
+             background: "#1e293b", padding: "6px 12px", borderRadius: "6px", border: "1px solid #334155", fontSize: "0.9rem", fontWeight: 600
+           }}>
+             <span style={{ color: "#94a3b8" }}>- DC:</span>
+             <span>{totalMinus.toFixed(2)} m</span>
+           </div>
+           <button
+            onClick={() => setSelected(new Set())}
+            style={{
+              background: "transparent", color: "#ef4444", border: "1px solid #ef4444",
+              padding: "6px 16px", borderRadius: "6px", cursor: "pointer",
+              fontWeight: 600, fontSize: "0.9rem", transition: "all 0.2s"
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"}
+            onMouseOut={(e) => e.currentTarget.style.background = "transparent"}
+          >
+            Sıfırla
+          </button>
         </div>
-        <div style={{
-          background: "rgba(15,23,42,0.9)", color: "#fff", padding: "8px 12px",
-          borderRadius: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.25)", fontWeight: 700, pointerEvents: "auto"
-        }}>
-          - DC cable: {totalMinus.toFixed(2)} m
+
+        {/* CENTER: Title */}
+        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", fontWeight: 700, fontSize: "1.25rem", letterSpacing: "0.5px" }}>
+          DC Cable Pulling Progress Tracking
         </div>
-        <button
-          onClick={() => setSelected(new Set())}
-          style={{
-            background: "rgba(220,38,38,0.9)", color: "#fff", padding: "8px 12px",
-            borderRadius: 12, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-            fontWeight: 700, cursor: "pointer", pointerEvents: "auto"
-          }}
-        >
-          Sıfırla
-        </button>
       </div>
 
       {/* HARİTA */}
-      <MapContainer
-        style={{ height: "100%", width: "100%" }}
+      <div style={{ flex: 1, position: "relative" }}>
+        <MapContainer
+          style={{ height: "100%", width: "100%" }}
         preferCanvas={true}
-        zoomControl={true}
+        zoomControl={false}
         zoomSnap={0}
         zoomDelta={0.25}
         wheelPxPerZoomLevel={80}
@@ -426,6 +440,7 @@ export default function App() {
         <ZoomHandler />
         <GeoJSON data={data} style={style} onEachFeature={onEach} smoothFactor={0} key={`${selected.size}-${Object.keys(plusMap).length}`} />
       </MapContainer>
+      </div>
     </div>
   );
 }

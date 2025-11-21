@@ -3,13 +3,23 @@ html, body, #root { height: 100%; margin: 0; padding: 0; }
 
 /* Table labels */
 .table-label {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
   color: #fff; /* White text for visibility on dark map/tables */
   font-size: var(--label-font-size, 10px);
   font-weight: bold;
   text-align: center;
   pointer-events: none; /* Allow clicking through the label */
   white-space: nowrap;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Remove tooltip arrow */
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+  display: none !important;
 }
