@@ -143,46 +143,35 @@ export default function App() {
       .catch((e) => setErr("GeoJSON yüklenemedi: " + e.message));
   }, []);
 
-  /* CSV yükle (başlıklı/başlıksız, otomatik ayraç) */
+  /* CSV yükle (ID + LENGTH) */
   useEffect(() => {
     fetch("/strings.csv", { cache: "no-store" })
       .then((r) => r.text())
       .then((csvText) => {
-        let p = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-        let rows = p.data || [];
+        const p = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        const rows = p.data || [];
 
-        const hasStringCol = p.meta?.fields?.some((f) => /string.?id/i.test(f));
-        if (!hasStringCol || rows.length === 0) {
-          p = Papa.parse(csvText, { header: false, skipEmptyLines: true });
-          rows = p.data.map((arr) => ({
-            string_id: arr[0],
-            str_plus: arr[1],
-            str_minus: arr[2],
-          }));
-        }
+        const plus = {};
+        const minus = {};
 
-        const field = {};
-        (p.meta?.fields || ["string_id", "str_plus", "str_minus"]).forEach((f) => {
-          const k = String(f).toLowerCase();
-          if (/string.?id/.test(k)) field.id = f;
-          if (/(str_?plus|plus|length_?plus|p)/.test(k)) field.plus = f;
-          if (/(str_?minus|minus|length_?minus|m)/.test(k)) field.minus = f;
-        });
+        rows.forEach(row => {
+          const rawId = row["ID"];
+          const id = normalizeId(rawId);
+          const len = parseFloat(row["LENGTH"]);
 
-        const plus = {}, minus = {};
-        rows.forEach((row) => {
-          const id = normalizeId(row[field.id ?? "string_id"] ?? row[0]);
-          if (!id) return;
-          const pVal = parseFloat(row[field.plus ?? "str_plus"] ?? row[1]);
-          const mVal = parseFloat(row[field.minus ?? "str_minus"] ?? row[2]);
-          if (!Number.isNaN(pVal)) plus[id] = pVal;
-          if (!Number.isNaN(mVal)) minus[id] = mVal;
+          if (!id || isNaN(len)) return;
+
+          if (len > 0) {
+            plus[id] = len;        // Pozitif → +DC
+          } else if (len < 0) {
+            minus[id] = Math.abs(len); // Negatif → -DC (mutlak değer)
+          }
         });
 
         setPlusMap(plus);
         setMinusMap(minus);
       })
-      .catch((e) => console.error("CSV load error:", e));
+      .catch(e => console.error("CSV load error:", e));
   }, []);
 
   /* yardımcılar */
