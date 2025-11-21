@@ -23,3 +23,8 @@ html, body, #root { height: 100%; margin: 0; padding: 0; }
 .leaflet-tooltip-right:before {
   display: none !important;
 }
+
+/* Hide labels when zoomed out */
+.hide-labels .table-label {
+  display: none !important;
+}
