@@ -6,6 +6,8 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@turf/bbox-polygon": "^7.3.0",
+    "@turf/boolean-intersects": "^7.3.0",
     "chart.js": "^4.5.1",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",

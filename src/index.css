@@ -28,3 +28,12 @@ html, body, #root { height: 100%; margin: 0; padding: 0; }
 .hide-labels .table-label {
   display: none !important;
 }
+
+/* Disable hover/click while selection box is active */
+.selection-active .leaflet-overlay-pane path,
+.selection-active .leaflet-overlay-pane polygon,
+.selection-active .leaflet-overlay-pane polyline,
+.selection-active .leaflet-overlay-pane circle,
+.selection-active .leaflet-overlay-pane rect {
+  pointer-events: none !important;
+}

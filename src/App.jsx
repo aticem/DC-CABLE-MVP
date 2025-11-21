@@ -22,6 +22,7 @@ const normalizeId = (s) => {
 
 export default function App() {
   const [data, setData] = useState(null);
+  const [uuidMap, setUuidMap] = useState({}); // uuid -> string_id
   const [plusMap, setPlusMap] = useState({});
   const [minusMap, setMinusMap] = useState({});
   const [selected, setSelected] = useState(new Set());
@@ -46,10 +47,18 @@ export default function App() {
         let json;
         try { json = JSON.parse(txt); }
         catch { setErr("GeoJSON 404/HTML. public/tables.geojson yolunu kontrol et."); return; }
+        
+        const map = {};
         if (Array.isArray(json.features)) {
-          json.features.forEach((f) => {
+          json.features.forEach((f, index) => {
             const rawId = f?.properties?.string_id || f?.properties?.text;
-            f.properties.string_id = normalizeId(rawId);
+            const normId = normalizeId(rawId);
+            f.properties.string_id = normId;
+            
+            // Assign unique ID for selection
+            const uuid = `feat-${index}`;
+            f.properties._uuid = uuid;
+            map[uuid] = normId;
 
             if (f.geometry?.type === "LineString" && Array.isArray(f.geometry.coordinates)) {
               const coords = f.geometry.coordinates;
@@ -64,6 +73,7 @@ export default function App() {
             }
           });
         }
+        setUuidMap(map);
         setData(json);
       })
       .catch((e) => setErr("GeoJSON yüklenemedi: " + e.message));
@@ -103,14 +113,16 @@ export default function App() {
   /* toplamlar */
   useEffect(() => {
     let sumP = 0, sumM = 0;
-    selected.forEach((id) => {
+    selected.forEach((uuid) => {
+      const id = uuidMap[uuid];
+      if (!id) return;
       const p = plusMap[id], m = minusMap[id];
       if (p != null) sumP += p;
       if (m != null) sumM += m;
     });
     setTotalPlus(sumP);
     setTotalMinus(sumM);
-  }, [selected, plusMap, minusMap]);
+  }, [selected, plusMap, minusMap, uuidMap]);
 
   const handleDailySubmit = (record) => {
     addRecord(record);
