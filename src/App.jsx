@@ -76,6 +76,24 @@ function InteractionManager({ setIsDragging }) {
   return null;
 }
 
+/* ---------- Zoom Handler for Text Scaling ---------- */
+function ZoomHandler() {
+  const map = useMap();
+  useEffect(() => {
+    const update = () => {
+      const zoom = map.getZoom();
+      // Scale font size so it appears fixed on the ground.
+      // Anchor: 30px at Zoom 21.
+      const size = 30 * Math.pow(2, zoom - 21);
+      map.getContainer().style.setProperty('--label-font-size', `${size}px`);
+    };
+    map.on("zoom", update);
+    update();
+    return () => map.off("zoom", update);
+  }, [map]);
+  return null;
+}
+
 /* ---------- Ana Uygulama ---------- */
 export default function App() {
   const [data, setData] = useState(null);
@@ -102,7 +120,22 @@ export default function App() {
         catch { setErr("GeoJSON 404/HTML. public/tables.geojson yolunu kontrol et."); return; }
         if (Array.isArray(json.features)) {
           json.features.forEach((f) => {
-            f.properties.string_id = normalizeId(f?.properties?.string_id);
+            // Use 'text' property if 'string_id' is not present
+            const rawId = f?.properties?.string_id || f?.properties?.text;
+            f.properties.string_id = normalizeId(rawId);
+
+            // Convert closed LineString to Polygon for better hover detection
+            if (f.geometry?.type === "LineString" && Array.isArray(f.geometry.coordinates)) {
+              const coords = f.geometry.coordinates;
+              if (coords.length >= 4) {
+                const first = coords[0];
+                const last = coords[coords.length - 1];
+                if (first[0] === last[0] && first[1] === last[1]) {
+                  f.geometry.type = "Polygon";
+                  f.geometry.coordinates = [coords];
+                }
+              }
+            }
           });
         }
         setData(json);
@@ -212,7 +245,56 @@ export default function App() {
   /* layer event’leri */
   const onEach = (feature, layer) => {
     const id = feature.properties?.string_id || "No ID";
-    layer.bindTooltip(id, { sticky: true, tolerance: 15 }); // Tolerans 10'dan 15'e artırıldı
+
+    // Calculate rotation angle
+    let angle = 0;
+    const geom = feature.geometry;
+    let points = [];
+    if (geom?.type === "Polygon" && geom.coordinates?.length > 0) {
+      points = geom.coordinates[0];
+    } else if (geom?.type === "LineString") {
+      points = geom.coordinates;
+    }
+
+    if (points.length >= 2) {
+      let maxLenSq = 0;
+      let bestEdge = [points[0], points[1]];
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const lat = p1[1];
+        // Adjust longitude difference by cos(lat)
+        const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
+        const dy = p2[1] - p1[1];
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq > maxLenSq) {
+          maxLenSq = lenSq;
+          bestEdge = [p1, p2];
+        }
+      }
+
+      const [p1, p2] = bestEdge;
+      const lat = p1[1];
+      const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
+      const dy = p2[1] - p1[1];
+      // Invert angle because screen Y is opposite to Latitude
+      angle = -1 * (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
+
+    // Keep text upright
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+
+    // Permanent tooltip centered on the polygon
+    layer.bindTooltip(
+      `<div style="transform: rotate(${angle.toFixed(2)}deg); transform-origin: center;">${id}</div>`,
+      { 
+        permanent: true, 
+        direction: "center", 
+        className: "table-label" 
+      }
+    );
 
     // Sol tık basılı: sürükleme için add mod aktif
     layer.on("mousedown", (e) => {
@@ -341,6 +423,7 @@ export default function App() {
         <FitToData data={data} />
         <InteractionManager setIsDragging={setIsDragging} />
         <MouseMode />
+        <ZoomHandler />
         <GeoJSON data={data} style={style} onEachFeature={onEach} smoothFactor={0} key={`${selected.size}-${Object.keys(plusMap).length}`} />
       </MapContainer>
     </div>
