@@ -22,6 +22,8 @@ const normalizeId = (s) => {
 
 export default function App() {
   const [data, setData] = useState(null);
+  const [backgroundData, setBackgroundData] = useState(null);
+  const [textData, setTextData] = useState(null);
   const [plusMap, setPlusMap] = useState({});
   const [minusMap, setMinusMap] = useState({});
   const [selected, setSelected] = useState(new Set());
@@ -40,6 +42,7 @@ export default function App() {
 
   /* GeoJSON yükle + ID normalize */
   useEffect(() => {
+    // Load main data
     fetch("/tables.geojson", { cache: "no-store" })
       .then((r) => r.text())
       .then((txt) => {
@@ -67,6 +70,28 @@ export default function App() {
         setData(json);
       })
       .catch((e) => setErr("GeoJSON yüklenemedi: " + e.message));
+
+    // Load background data
+    fetch("/background.geojson", { cache: "no-store" })
+      .then((r) => {
+        if (r.ok) return r.json();
+        return null;
+      })
+      .then((json) => {
+        if (json) setBackgroundData(json);
+      })
+      .catch((e) => console.log("Background GeoJSON not found or invalid", e));
+
+    // Load text GeoJSON
+    fetch("/tetx.geojson", { cache: "no-store" })
+      .then((r) => {
+        if (r.ok) return r.json();
+        return null;
+      })
+      .then((json) => {
+        if (json) setTextData(json);
+      })
+      .catch((e) => console.log("Text GeoJSON not found or invalid", e));
   }, []);
 
   /* CSV yükle (ID + LENGTH) */
@@ -138,6 +163,8 @@ export default function App() {
       <div style={{ flex: 1, position: "relative" }}>
         <CableMap 
           data={data} 
+          backgroundData={backgroundData}
+          textData={textData}
           plusMap={plusMap} 
           minusMap={minusMap} 
           selected={selected} 

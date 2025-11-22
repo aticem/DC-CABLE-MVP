@@ -174,32 +174,12 @@ function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
   );
 }
 
-export default function CableMap({ data, plusMap, minusMap, selected, setSelected }) {
+export default function CableMap({ data, backgroundData, textData, plusMap, minusMap, selected, setSelected }) {
   const [, _force] = useState(false);
   const setIsDragging = (v) => _force(v);
   const geoJsonRef = useRef(null);
 
   /* yardımcılar */
-  const addId = (id) => { 
-    if (!id) return; 
-    setSelected(prev => {
-      if (prev.has(id)) return prev;
-      const s = new Set(prev);
-      s.add(id);
-      return s;
-    });
-  };
-  
-  const removeId = (id) => { 
-    if (!id) return; 
-    setSelected(prev => {
-      if (!prev.has(id)) return prev;
-      const s = new Set(prev);
-      s.delete(id);
-      return s;
-    });
-  };
-
   const addIds = (ids) => {
     setSelected(prev => {
       const s = new Set(prev);
@@ -228,6 +208,28 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
     });
   };
 
+  const addId = (id) => { 
+    if (!id) return; 
+    setSelected(prev => {
+      if (prev.has(id)) return prev;
+      const s = new Set(prev);
+      s.add(id);
+      return s;
+    });
+  };
+  
+  const removeId = (id) => { 
+    if (!id) return; 
+    setSelected(prev => {
+      if (!prev.has(id)) return prev;
+      const s = new Set(prev);
+      s.delete(id);
+      return s;
+    });
+  };
+
+  const isSelected = (id) => selected.has(id);
+
   const hasAny = (id) => {
     const p = plusMap[id], m = minusMap[id];
     return p != null || m != null;
@@ -236,19 +238,34 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
   /* stil */
   const style = (f) => {
     const id = f.properties?.string_id;
-    const isSel = selected.has(id);
-    let color = "#374151";
-    let fillColor = "#374151";
-    if (isSel) {
-      color = "#22c55e";
-      fillColor = "#22c55e";
-    }
+    const isSel = isSelected(id);
+    const has = hasAny(id);
+
+    const color = isSel ? "#22c55e" : "#374151";
+    const fillColor = isSel ? "#22c55e" : "#374151";
+
     return { color, fillColor, weight: isSel ? 3 : 1, fillOpacity: isSel ? 0.8 : 0.6, pane: "overlayPane" };
+  };
+
+  const backgroundStyle = {
+    color: "#9ca3af",
+    weight: 1,
+    dashArray: "4, 4",
+    fillOpacity: 0,
+    interactive: false
+  };
+
+  const textStyle = {
+    color: "transparent",
+    weight: 0,
+    fillOpacity: 0,
+    interactive: false
   };
 
   // Update styles imperatively when selection changes
   useEffect(() => {
     if (!geoJsonRef.current) return;
+
     geoJsonRef.current.eachLayer((layer) => {
       const feature = layer.feature;
       if (feature) {
@@ -327,6 +344,63 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
     });
   };
 
+  const onEachBackground = (feature, layer) => {
+    // Just lines, no labels
+  };
+
+  const onEachText = (feature, layer) => {
+    const props = feature.properties || {};
+    const label = props.Text || props.text || props.Name || props.name || props.string_id || props.id || "";
+    
+    if (!label) return;
+
+    // Calculate rotation angle
+    let angle = 0;
+    const geom = feature.geometry;
+    let points = [];
+    if (geom?.type === "Polygon" && geom.coordinates?.length > 0) {
+      points = geom.coordinates[0];
+    } else if (geom?.type === "LineString") {
+      points = geom.coordinates;
+    }
+
+    if (points.length >= 2) {
+      let maxLenSq = 0;
+      let bestEdge = [points[0], points[1]];
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const lat = p1[1];
+        const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
+        const dy = p2[1] - p1[1];
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq > maxLenSq) {
+          maxLenSq = lenSq;
+          bestEdge = [p1, p2];
+        }
+      }
+
+      const [p1, p2] = bestEdge;
+      const lat = p1[1];
+      const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
+      const dy = p2[1] - p1[1];
+      angle = -1 * (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
+
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+
+    layer.bindTooltip(
+      `<div style="transform: rotate(${angle.toFixed(2)}deg); transform-origin: center; opacity: 0.7;">${label}</div>`,
+      { 
+        permanent: true, 
+        direction: "center", 
+        className: "table-label background-label" 
+      }
+    );
+  };
+
   /* Map-level: Global mouseup ile mod sıfırla */
   const MouseMode = () => {
     const map = useMap();
@@ -368,7 +442,22 @@ export default function CableMap({ data, plusMap, minusMap, selected, setSelecte
       <MouseMode />
       <BoxSelection geoJsonRef={geoJsonRef} onSelect={addIds} onDeselect={removeIds} />
       <ZoomHandler />
+      {backgroundData && (
+        <GeoJSON 
+          data={backgroundData} 
+          style={backgroundStyle} 
+          onEachFeature={onEachBackground} 
+        />
+      )}
+      {textData && (
+        <GeoJSON 
+          data={textData} 
+          style={textStyle} 
+          onEachFeature={onEachText} 
+        />
+      )}
       <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} />
     </MapContainer>
   );
 }
+
