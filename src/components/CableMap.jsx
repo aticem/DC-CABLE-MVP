@@ -192,6 +192,12 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
   const [highlightedInverters, setHighlightedInverters] = useState(new Set());
   const [inverterColors, setInverterColors] = useState({});
 
+  const highlightedInvertersRef = useRef(highlightedInverters);
+  useEffect(() => { highlightedInvertersRef.current = highlightedInverters; }, [highlightedInverters]);
+
+  const dataRef = useRef(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
+
   /* ---------- Text Alignment Logic ---------- */
   useEffect(() => {
     if (!textData || !invPointsData) {
@@ -375,14 +381,16 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
       }
     }
 
-    const color = isSel ? "#22c55e" : (isHighlighted ? highlightColor : "#374151"); 
-    const fillColor = isSel ? "#22c55e" : (isHighlighted ? highlightColor : "#374151");
+    // If selected, prefer highlight color if available, else green. If not selected, gray.
+    const finalColor = isSel 
+      ? (isHighlighted ? highlightColor : "#22c55e") 
+      : "#374151";
 
     return { 
-      color, 
-      fillColor, 
-      weight: isSel ? 3 : (isHighlighted ? 3 : 1), 
-      fillOpacity: isSel ? 0.8 : (isHighlighted ? 0.8 : 0.6), 
+      color: finalColor, 
+      fillColor: finalColor, 
+      weight: isSel ? 3 : 1, 
+      fillOpacity: isSel ? 0.8 : 0.6, 
       pane: "overlayPane" 
     };
   };
@@ -444,24 +452,46 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
 
     marker.on('click', (e) => {
       L.DomEvent.stopPropagation(e);
-      // Toggle highlight (multi-select)
-      setHighlightedInverters(prev => {
-        const next = new Set(prev);
-        if (next.has(label)) {
-            next.delete(label);
-            setInverterColors(prevColors => {
-                const newColors = {...prevColors};
-                delete newColors[label];
-                return newColors;
-            });
-        } else {
-            next.add(label);
-            // Assign random color
-            const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-            setInverterColors(prevColors => ({...prevColors, [label]: randomColor}));
-        }
-        return next;
-      });
+      
+      const isCurrentlyHighlighted = highlightedInvertersRef.current.has(label);
+      
+      // Find matching IDs
+      const normalizedInv = label.replace(/\s+/g, "");
+      const idsToToggle = [];
+      const currentData = dataRef.current;
+      if (currentData && currentData.features) {
+          currentData.features.forEach(f => {
+              const fid = f.properties?.string_id;
+              if (fid && fid.startsWith(normalizedInv + "-")) {
+                  idsToToggle.push(fid);
+              }
+          });
+      }
+
+      if (isCurrentlyHighlighted) {
+          // Remove
+          setHighlightedInverters(prev => {
+              const next = new Set(prev);
+              next.delete(label);
+              return next;
+          });
+          setInverterColors(prev => {
+              const next = {...prev};
+              delete next[label];
+              return next;
+          });
+          removeIds(idsToToggle);
+      } else {
+          // Add
+          setHighlightedInverters(prev => {
+              const next = new Set(prev);
+              next.add(label);
+              return next;
+          });
+          const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+          setInverterColors(prev => ({...prev, [label]: randomColor}));
+          addIds(idsToToggle);
+      }
     });
 
     return marker;
