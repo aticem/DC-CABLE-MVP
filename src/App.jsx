@@ -24,6 +24,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [backgroundData, setBackgroundData] = useState(null);
   const [textData, setTextData] = useState(null);
+  const [invPointsData, setInvPointsData] = useState(null);
   const [plusMap, setPlusMap] = useState({});
   const [minusMap, setMinusMap] = useState({});
   const [selected, setSelected] = useState(new Set());
@@ -71,8 +72,8 @@ export default function App() {
       })
       .catch((e) => setErr("GeoJSON yüklenemedi: " + e.message));
 
-    // Load background data
-    fetch("/background.geojson", { cache: "no-store" })
+    // Load background data (lines.geojson)
+    fetch("/lines.geojson", { cache: "no-store" })
       .then((r) => {
         if (r.ok) return r.json();
         return null;
@@ -80,10 +81,10 @@ export default function App() {
       .then((json) => {
         if (json) setBackgroundData(json);
       })
-      .catch((e) => console.log("Background GeoJSON not found or invalid", e));
+      .catch((e) => console.log("Background GeoJSON (lines.geojson) not found or invalid", e));
 
-    // Load text GeoJSON
-    fetch("/tetx.geojson", { cache: "no-store" })
+    // Load text GeoJSON (texts.geojson)
+    fetch("/texts.geojson", { cache: "no-store" })
       .then((r) => {
         if (r.ok) return r.json();
         return null;
@@ -91,7 +92,18 @@ export default function App() {
       .then((json) => {
         if (json) setTextData(json);
       })
-      .catch((e) => console.log("Text GeoJSON not found or invalid", e));
+      .catch((e) => console.log("Text GeoJSON (texts.geojson) not found or invalid", e));
+
+    // Load inv_points GeoJSON (inv_points.geojson)
+    fetch("/inv_points.geojson", { cache: "no-store" })
+      .then((r) => {
+        if (r.ok) return r.json();
+        return null;
+      })
+      .then((json) => {
+        if (json) setInvPointsData(json);
+      })
+      .catch((e) => console.log("Inv Points GeoJSON (inv_points.geojson) not found or invalid", e));
   }, []);
 
   /* CSV yükle (ID + LENGTH) */
@@ -165,6 +177,7 @@ export default function App() {
           data={data} 
           backgroundData={backgroundData}
           textData={textData}
+          invPointsData={invPointsData}
           plusMap={plusMap} 
           minusMap={minusMap} 
           selected={selected} 
