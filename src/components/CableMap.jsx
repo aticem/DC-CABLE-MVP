@@ -189,6 +189,8 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
   const setIsDragging = (v) => _force(v);
   const geoJsonRef = useRef(null);
   const [processedTextData, setProcessedTextData] = useState(null);
+  const [highlightedInverters, setHighlightedInverters] = useState(new Set());
+  const [inverterColors, setInverterColors] = useState({});
 
   /* ---------- Text Alignment Logic ---------- */
   useEffect(() => {
@@ -357,10 +359,32 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     const isSel = isSelected(id);
     const has = hasAny(id);
 
-    const color = isSel ? "#22c55e" : "#374151";
-    const fillColor = isSel ? "#22c55e" : "#374151";
+    // Check for inverter highlight
+    let isHighlighted = false;
+    let highlightColor = "#06b6d4"; // Default Cyan
 
-    return { color, fillColor, weight: isSel ? 3 : 1, fillOpacity: isSel ? 0.8 : 0.6, pane: "overlayPane" };
+    if (id && highlightedInverters.size > 0) {
+      for (const inv of highlightedInverters) {
+        const normalizedInv = inv.replace(/\s+/g, "");
+        // Match exact inverter prefix (e.g. "TX6-INV2-") to avoid matching "TX6-INV21"
+        if (id.startsWith(normalizedInv + "-")) {
+          isHighlighted = true;
+          highlightColor = inverterColors[inv] || "#06b6d4";
+          break;
+        }
+      }
+    }
+
+    const color = isSel ? "#22c55e" : (isHighlighted ? highlightColor : "#374151"); 
+    const fillColor = isSel ? "#22c55e" : (isHighlighted ? highlightColor : "#374151");
+
+    return { 
+      color, 
+      fillColor, 
+      weight: isSel ? 3 : (isHighlighted ? 3 : 1), 
+      fillOpacity: isSel ? 0.8 : (isHighlighted ? 0.8 : 0.6), 
+      pane: "overlayPane" 
+    };
   };
 
   const backgroundStyle = (feature) => {
@@ -403,7 +427,7 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     const label = props.Text || props.text || props.Name || props.name || props.string_id || props.id || "";
     const angle = props.Rotation || props.angle || 0;
 
-    return L.marker(latlng, {
+    const marker = L.marker(latlng, {
       icon: L.divIcon({
         className: 'bg-transparent custom-text-label',
         html: `<div style="
@@ -413,9 +437,34 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
           font-weight: bold; 
           font-size: var(--label-font-size);
           text-shadow: 0px 0px 2px #000;
+          cursor: pointer;
         ">${label}</div>`
       })
     });
+
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      // Toggle highlight (multi-select)
+      setHighlightedInverters(prev => {
+        const next = new Set(prev);
+        if (next.has(label)) {
+            next.delete(label);
+            setInverterColors(prevColors => {
+                const newColors = {...prevColors};
+                delete newColors[label];
+                return newColors;
+            });
+        } else {
+            next.add(label);
+            // Assign random color
+            const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+            setInverterColors(prevColors => ({...prevColors, [label]: randomColor}));
+        }
+        return next;
+      });
+    });
+
+    return marker;
   };
 
   // Update styles imperatively when selection changes
@@ -430,9 +479,38 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
         if (newStyle.weight === 3) {
             layer.bringToFront();
         }
+
+        // Handle tooltip visibility for highlighted items
+        const id = feature.properties?.string_id;
+        let isHighlighted = false;
+        if (id && highlightedInverters.size > 0) {
+          for (const inv of highlightedInverters) {
+            const normalizedInv = inv.replace(/\s+/g, "");
+            // Match exact inverter prefix (e.g. "TX6-INV2-")
+            if (id.startsWith(normalizedInv + "-")) {
+              isHighlighted = true;
+              break;
+            }
+          }
+        }
+
+        const tooltip = layer.getTooltip();
+        if (tooltip) {
+            const content = tooltip.getContent();
+            const isPermanent = tooltip.options.permanent;
+            
+            if (isHighlighted && !isPermanent) {
+                layer.unbindTooltip();
+                layer.bindTooltip(content, { permanent: true, direction: "center", className: "table-label" });
+            } else if (!isHighlighted && isPermanent) {
+                layer.unbindTooltip();
+                layer.bindTooltip(content, { permanent: false, direction: "center", className: "table-label" });
+                layer.closeTooltip();
+            }
+        }
       }
     });
-  }, [selected, plusMap, minusMap]);
+  }, [selected, plusMap, minusMap, highlightedInverters]);
 
   /* layer event’leri */
   const onEach = (feature, layer) => {
