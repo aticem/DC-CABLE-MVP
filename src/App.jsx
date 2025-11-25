@@ -37,6 +37,9 @@ export default function App() {
   const [mc4Status, setMc4Status] = useState({}); // { "tableId": { start: bool, end: bool } }
   const [mc4Stats, setMc4Stats] = useState({ total: 0, completed: 0 });
 
+  // Mode toggles
+  const [activeModes, setActiveModes] = useState({ dc: true, mc4: false });
+
   // Modals
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
@@ -161,16 +164,26 @@ export default function App() {
     setSelected(new Set()); // Clear selection after submit
   };
 
+  const toggleMode = (mode) => {
+    setActiveModes(prev => ({ ...prev, [mode]: !prev[mode] }));
+  };
+
   const handleResetAll = () => {
     resetLog();
-    setSelected(new Set());
+    if (activeModes.dc) {
+      setSelected(new Set());
+    }
+    if (activeModes.mc4) {
+      setMc4Status({});
+    }
     setIsResetOpen(false);
   };
 
-  const toggleMc4 = (tableId, position) => {
+  const toggleMc4 = (tableId, position, value) => {
     setMc4Status(prev => {
       const currentTable = prev[tableId] || { start: false, end: false };
-      const newTable = { ...currentTable, [position]: !currentTable[position] };
+      const nextValue = typeof value === "boolean" ? value : !currentTable[position];
+      const newTable = { ...currentTable, [position]: nextValue };
       return { ...prev, [tableId]: newTable };
     });
   };
@@ -192,6 +205,8 @@ export default function App() {
         totalPlus={totalPlus}
         totalMinus={totalMinus}
         mc4Stats={mc4Stats}
+        activeModes={activeModes}
+        onToggleMode={toggleMode}
         onReset={() => setIsResetOpen(true)}
         onExport={exportToExcel}
         onSubmitDaily={() => setIsSubmitOpen(true)}
@@ -209,6 +224,7 @@ export default function App() {
           setSelected={setSelected}
           mc4Status={mc4Status}
           onToggleMc4={toggleMc4}
+          activeModes={activeModes}
         />
       </div>
 

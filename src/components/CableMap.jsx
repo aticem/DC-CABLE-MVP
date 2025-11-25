@@ -89,7 +89,7 @@ function ZoomHandler() {
 }
 
 /* ---------- Box Selection ---------- */
-function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
+function BoxSelection({ geoJsonRef, mc4LayerRef, onSelect, onDeselect, onToggleMc4Bulk, modeRef: activeModeRef }) {
   const map = useMap();
   const [box, setBox] = useState(null);
   const startRef = useRef(null);
@@ -100,6 +100,9 @@ function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
     const container = map.getContainer();
 
     const onMouseDown = (e) => {
+      const modes = activeModeRef?.current || {};
+      if (!modes.dc && !modes.mc4) return;
+      
       // Left (0) or Right (2)
       if (e.button !== 0 && e.button !== 2) return;
       
@@ -131,23 +134,47 @@ function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
     const onMouseUp = (e) => {
       if (!startRef.current) return;
 
-      if (boxRef.current && geoJsonRef.current) {
+      if (boxRef.current && (geoJsonRef.current || mc4LayerRef?.current)) {
+        const modes = activeModeRef?.current || {};
+        if (!modes.dc && !modes.mc4) return;
+
         const b = boxRef.current;
         const p1 = map.containerPointToLatLng([b.x, b.y]);
         const p2 = map.containerPointToLatLng([b.x + b.width, b.y + b.height]);
         const bounds = L.latLngBounds(p1, p2);
 
-        const ids = [];
-        geoJsonRef.current.eachLayer((layer) => {
-          if (layer.feature && layer.feature.properties?.string_id) {
-             if (bounds.intersects(layer.getBounds())) {
-               ids.push(layer.feature.properties.string_id);
-             }
-          }
-        });
+        if (modes.dc && geoJsonRef.current) {
+          const ids = [];
+          geoJsonRef.current.eachLayer((layer) => {
+            if (layer.feature && layer.feature.properties?.string_id) {
+              if (bounds.intersects(layer.getBounds())) {
+                ids.push(layer.feature.properties.string_id);
+              }
+            }
+          });
 
-        if (modeRef.current === 'select') onSelect(ids);
-        else onDeselect(ids);
+          if (ids.length) {
+            if (modeRef.current === 'select') onSelect(ids);
+            else onDeselect(ids);
+          }
+        }
+
+        if (modes.mc4 && mc4LayerRef?.current && onToggleMc4Bulk) {
+          const targets = [];
+          mc4LayerRef.current.eachLayer((layer) => {
+            const props = layer.feature?.properties;
+            if (props?.id && props?.position) {
+              if (bounds.intersects(layer.getBounds())) {
+                targets.push(props);
+              }
+            }
+          });
+
+          if (targets.length) {
+            const value = modeRef.current === 'select';
+            onToggleMc4Bulk(targets, value);
+          }
+        }
       }
 
       startRef.current = null;
@@ -165,7 +192,7 @@ function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [map, geoJsonRef, onSelect, onDeselect]);
+  }, [map, geoJsonRef, mc4LayerRef, onSelect, onDeselect, onToggleMc4Bulk]);
 
   if (!box) return null;
 
@@ -240,13 +267,17 @@ const createSquare = (center, size) => {
   ];
 };
 
-export default function CableMap({ data, backgroundData, textData, invPointsData, plusMap, minusMap, selected, setSelected, mc4Status, onToggleMc4 }) {
+export default function CableMap({ data, backgroundData, textData, invPointsData, plusMap, minusMap, selected, setSelected, mc4Status, onToggleMc4, activeModes }) {
   const [, _force] = useState(false);
   const setIsDragging = (v) => _force(v);
   const geoJsonRef = useRef(null);
   const [processedTextData, setProcessedTextData] = useState(null);
   const [highlightedInverters, setHighlightedInverters] = useState(new Set());
   const [inverterColors, setInverterColors] = useState({});
+
+  // Store mode selections in ref for event handlers
+  const modeRef = useRef(activeModes);
+  useEffect(() => { modeRef.current = activeModes; }, [activeModes]);
 
   const highlightedInvertersRef = useRef(highlightedInverters);
   useEffect(() => { highlightedInvertersRef.current = highlightedInverters; }, [highlightedInverters]);
@@ -288,32 +319,40 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     return { type: "FeatureCollection", features };
   }, [data]);
 
-  // Ref for MC4 layer to update styles imperatively
+  // Ref for MC4 layer to update styles / order
   const mc4LayerRef = useRef(null);
 
-  // Update MC4 styles when status changes
-  useEffect(() => {
-    if (!mc4LayerRef.current || !mc4Status) return;
-
-    mc4LayerRef.current.eachLayer(layer => {
-      const { id, position } = layer.feature.properties;
-      const status = mc4Status[id] || { start: false, end: false };
-      const isInstalled = status[position];
-
-      // Style update
-      if (isInstalled) {
-        layer.setStyle({ color: '#3b82f6', fillColor: '#3b82f6', weight: 1, fillOpacity: 1 });
-        if (layer.getTooltip()) {
-          layer.unbindTooltip();
-        }
-      } else {
-        layer.setStyle({ color: 'black', fillColor: 'black', weight: 1, fillOpacity: 1 });
-        if (layer.getTooltip()) {
-          layer.unbindTooltip();
-        }
-      }
+  // Derived key so MC4 GeoJSON re-renders when status changes
+  const mc4StatusKey = React.useMemo(() => {
+    if (!mc4Status) return 'mc4-empty';
+    const parts = Object.entries(mc4Status).map(([id, status]) => {
+      const start = status?.start ? '1' : '0';
+      const end = status?.end ? '1' : '0';
+      return `${id}:${start}${end}`;
     });
+    return `mc4-${parts.sort().join('|')}`;
   }, [mc4Status]);
+
+  // Style helper for MC4 squares
+  const mc4Style = React.useCallback((feature) => {
+    const { id, position } = feature.properties || {};
+    const installed = mc4Status?.[id]?.[position];
+    const color = installed ? '#3b82f6' : '#000000';
+    return {
+      color,
+      fillColor: color,
+      weight: 1,
+      fillOpacity: 1,
+      pane: 'markerPane'
+    };
+  }, [mc4Status]);
+
+  // Keep MC4 layer above tables for reliable clicks
+  useEffect(() => {
+    if (mc4LayerRef.current) {
+      mc4LayerRef.current.bringToFront();
+    }
+  }, [mc4Features, mc4Status]);
 
   /* ---------- Text Alignment Logic ---------- */
   useEffect(() => {
@@ -469,6 +508,13 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     });
   };
 
+  const bulkToggleMc4 = (targets, value) => {
+    if (!targets || !targets.length) return;
+    targets.forEach(({ id, position }) => {
+      onToggleMc4(id, position, value);
+    });
+  };
+
   const isSelected = (id) => selected.has(id);
 
   const hasAny = (id) => {
@@ -568,6 +614,8 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     });
 
     marker.on('click', (e) => {
+      const modes = modeRef.current || {};
+      if (!modes.dc) return;
       L.DomEvent.stopPropagation(e);
       
       const isCurrentlyHighlighted = highlightedInvertersRef.current.has(label);
@@ -710,6 +758,9 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     );
 
     layer.on("click", (e) => {
+      const modes = modeRef.current || {};
+      if (!modes.dc) return;
+
       if (e.originalEvent.button === 0) {
         addId(id);
         L.DomEvent.stopPropagation(e);
@@ -717,6 +768,9 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     });
 
     layer.on("contextmenu", (e) => {
+      const modes = modeRef.current || {};
+      if (!modes.dc) return;
+
       if (e.originalEvent.button === 2) {
         removeId(id);
         L.DomEvent.preventDefault(e);
@@ -777,7 +831,14 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
       <FitToData data={data} />
       <InteractionManager setIsDragging={setIsDragging} />
       <MouseMode />
-      <BoxSelection geoJsonRef={geoJsonRef} onSelect={addIds} onDeselect={removeIds} />
+      <BoxSelection
+        geoJsonRef={geoJsonRef}
+        mc4LayerRef={mc4LayerRef}
+        onSelect={addIds}
+        onDeselect={removeIds}
+        onToggleMc4Bulk={bulkToggleMc4}
+        modeRef={modeRef}
+      />
       <ZoomHandler />
       {backgroundData && (
         <GeoJSON 
@@ -800,26 +861,40 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
           pointToLayer={pointToLayerText}
         />
       )}
+      <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} />
       {mc4Features && (
-        <GeoJSON 
+        <GeoJSON
+          key={mc4StatusKey}
           ref={mc4LayerRef}
-          data={mc4Features} 
-          style={{ color: 'black', fillColor: 'black', weight: 1, fillOpacity: 1 }}
+          data={mc4Features}
+          style={mc4Style}
           bubblingMouseEvents={false}
           onEachFeature={(feature, layer) => {
             layer.on('click', (e) => {
+              const modes = modeRef.current || {};
+              if (!modes.mc4) return;
+
               L.DomEvent.stopPropagation(e);
               if (e.originalEvent) {
                 e.originalEvent.preventDefault();
                 e.originalEvent.stopPropagation();
               }
               const { id, position } = feature.properties;
-              onToggleMc4(id, position);
+              onToggleMc4(id, position, true);
+            });
+
+            layer.on('contextmenu', (e) => {
+              const modes = modeRef.current || {};
+              if (!modes.mc4) return;
+
+              L.DomEvent.preventDefault(e);
+              L.DomEvent.stopPropagation(e);
+              const { id, position } = feature.properties;
+              onToggleMc4(id, position, false);
             });
           }}
         />
       )}
-      <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} />
     </MapContainer>
     </>
   );
