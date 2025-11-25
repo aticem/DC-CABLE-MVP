@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Papa from "papaparse";
 import useDailyLog from "./hooks/useDailyLog";
 import { useChartExport } from "./hooks/useChartExport";
@@ -20,6 +20,39 @@ const normalizeId = (s) => {
     .replace(/\b(SUBS?|TX|INV|STR)0+(\d+)\b/g, (_, p1, p2) => `${p1}${p2}`); // STR07->STR7
 };
 
+function useUndoableSet(initialValue) {
+  const [state, setState] = useState(initialValue);
+  const historyRef = useRef([initialValue]);
+  const indexRef = useRef(0);
+
+  const set = useCallback((updater) => {
+    setState((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      const history = historyRef.current.slice(0, indexRef.current + 1);
+      history.push(next);
+      historyRef.current = history;
+      indexRef.current = history.length - 1;
+      return next;
+    });
+  }, []);
+
+  const undo = useCallback(() => {
+    if (indexRef.current > 0) {
+      indexRef.current -= 1;
+      setState(historyRef.current[indexRef.current]);
+    }
+  }, []);
+
+  const redo = useCallback(() => {
+    if (indexRef.current < historyRef.current.length - 1) {
+      indexRef.current += 1;
+      setState(historyRef.current[indexRef.current]);
+    }
+  }, []);
+
+  return [state, set, undo, redo];
+}
+
 export default function App() {
   const [data, setData] = useState(null);
   const [backgroundData, setBackgroundData] = useState(null);
@@ -27,11 +60,12 @@ export default function App() {
   const [invPointsData, setInvPointsData] = useState(null);
   const [plusMap, setPlusMap] = useState({});
   const [minusMap, setMinusMap] = useState({});
-  const [selected, setSelected] = useState(new Set());
+  const [selected, setSelected, undoSelected, redoSelected] = useUndoableSet(new Set());
   const [err, setErr] = useState("");
 
   const [totalPlus, setTotalPlus] = useState(0);
   const [totalMinus, setTotalMinus] = useState(0);
+  const [totalFieldLength, setTotalFieldLength] = useState(0);
 
   // MC4 State
   const [mc4Status, setMc4Status] = useState({}); // { "tableId": { start: bool, end: bool } }
@@ -143,6 +177,10 @@ export default function App() {
 
         setPlusMap(plus);
         setMinusMap(minus);
+
+        // Calculate total field length
+        const total = Object.values(plus).reduce((a, b) => a + b, 0) + Object.values(minus).reduce((a, b) => a + b, 0);
+        setTotalFieldLength(total);
       })
       .catch(e => console.error("CSV load error:", e));
   }, []);
@@ -197,19 +235,36 @@ export default function App() {
     setMc4Stats(prev => ({ ...prev, completed }));
   }, [mc4Status]);
 
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        undoSelected();
+      } else if ((e.ctrlKey && e.key.toLowerCase() === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
+        e.preventDefault();
+        redoSelected();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [undoSelected, redoSelected]);
+
   if (err) return <div style={{ padding:16, color:"#b91c1c", background:"#fee2e2" }}>❌ {err}</div>;
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0b1020" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#f4f6fb" }}>
       <ProgressStats
         totalPlus={totalPlus}
         totalMinus={totalMinus}
+        totalFieldLength={totalFieldLength}
         mc4Stats={mc4Stats}
         activeModes={activeModes}
         onToggleMode={toggleMode}
         onReset={() => setIsResetOpen(true)}
         onExport={exportToExcel}
         onSubmitDaily={() => setIsSubmitOpen(true)}
+        onUndoSelection={undoSelected}
+        onRedoSelection={redoSelected}
       />
 
       <div style={{ flex: 1, position: "relative" }}>
@@ -248,3 +303,4 @@ export default function App() {
     </div>
   );
 }
+

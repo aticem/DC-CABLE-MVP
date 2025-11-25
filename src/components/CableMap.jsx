@@ -337,7 +337,7 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
   const mc4Style = React.useCallback((feature) => {
     const { id, position } = feature.properties || {};
     const installed = mc4Status?.[id]?.[position];
-    const color = installed ? '#3b82f6' : '#000000';
+    const color = installed ? '#ef4444' : '#1f2937';
     return {
       color,
       fillColor: color,
@@ -559,22 +559,12 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
   };
 
   const backgroundStyle = (feature) => {
-    const rainbow = ["#FF69B4", "#FFA52C", "#FFFF41", "#008018", "#0000F9", "#86007D"];
-    // Use geometry if properties are empty to ensure uniqueness
-    const str = (feature?.properties && Object.keys(feature.properties).length > 0) 
-      ? JSON.stringify(feature.properties) 
-      : JSON.stringify(feature?.geometry || Math.random());
-      
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const color = rainbow[Math.abs(hash) % rainbow.length];
-
     return {
-      color: color,
-      weight: 2,
-      opacity: 0.8,
+      color: "#0b0b0b",
+      weight: 2.5,
+      opacity: 0.95,
+      lineCap: "round",
+      lineJoin: "round",
       interactive: false
     };
   };
@@ -812,7 +802,7 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
       }
     `}</style>
     <MapContainer
-      style={{ height: "100%", width: "100%" }}
+      style={{ height: "100%", width: "100%", background: "#ffffff" }}
       preferCanvas={true}
       zoomControl={false}
       zoomSnap={0}
@@ -824,7 +814,8 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
       dragging={false}
     >
       <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        attribution="&copy; OpenStreetMap contributors &copy; CARTO"
         maxNativeZoom={19}
         maxZoom={22}
       />
