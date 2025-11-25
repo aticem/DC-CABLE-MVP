@@ -1,12 +1,21 @@
 import React from 'react';
 
-export default function ProgressStats({ totalPlus, totalMinus, onReset, onExport, onSubmitDaily }) {
+export default function ProgressStats({ totalPlus, totalMinus, mc4Stats, onReset, onExport, onSubmitDaily }) {
+  const mc4Total = mc4Stats?.total || 0;
+  const mc4Completed = mc4Stats?.completed || 0;
+  const mc4Remaining = mc4Total - mc4Completed;
+  const mc4Percent = mc4Total > 0 ? ((mc4Completed / mc4Total) * 100).toFixed(1) : 0;
+
   return (
     <div style={{
-      height: "60px", background: "#0f172a", display: "flex", alignItems: "center",
-      padding: "0 24px", justifyContent: "space-between", color: "white",
-      borderBottom: "1px solid #1e293b", zIndex: 2000, position: "relative"
+      display: "flex", flexDirection: "column", width: "100%", zIndex: 2000, position: "relative"
     }}>
+      {/* Top Row: DC Stats */}
+      <div style={{
+        height: "60px", background: "#0f172a", display: "flex", alignItems: "center",
+        padding: "0 24px", justifyContent: "space-between", color: "white",
+        borderBottom: "1px solid #1e293b"
+      }}>
       {/* LEFT: Stats */}
       <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
          <div style={{
@@ -64,6 +73,19 @@ export default function ProgressStats({ totalPlus, totalMinus, onReset, onExport
         >
           Reset All
         </button>
+      </div>
+      </div>
+
+      {/* Bottom Row: MC4 Stats */}
+      <div style={{
+        height: "40px", background: "#1e293b", display: "flex", alignItems: "center",
+        padding: "0 24px", justifyContent: "center", color: "white",
+        borderBottom: "1px solid #334155", gap: "24px", fontSize: "0.9rem"
+      }}>
+        <span style={{ fontWeight: 600 }}>MC4 Installation:</span>
+        <span style={{ color: "#94a3b8" }}>Total: <span style={{ color: "white" }}>{mc4Total}</span></span>
+        <span style={{ color: "#94a3b8" }}>Completed: <span style={{ color: "#22c55e" }}>{mc4Completed}</span> ({mc4Percent}%)</span>
+        <span style={{ color: "#94a3b8" }}>Remaining: <span style={{ color: "#ef4444" }}>{mc4Remaining}</span></span>
       </div>
     </div>
   );

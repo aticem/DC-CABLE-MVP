@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, useMap, Marker } from "react-leaflet";
 import L from "leaflet";
 
 /* ---------- Fit To Data ---------- */
@@ -184,7 +184,63 @@ function BoxSelection({ geoJsonRef, onSelect, onDeselect }) {
   );
 }
 
-export default function CableMap({ data, backgroundData, textData, invPointsData, plusMap, minusMap, selected, setSelected }) {
+/* ---------- MC4 Helper ---------- */
+const getTableEndpoints = (feature) => {
+  if (!feature.geometry || feature.geometry.type !== 'Polygon') return null;
+  const coords = feature.geometry.coordinates[0]; // Ring
+  if (coords.length < 4) return null; 
+
+  // Calculate all edge lengths
+  const edges = [];
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p1 = coords[i];
+    const p2 = coords[i+1];
+    const dx = p1[0] - p2[0];
+    const dy = p1[1] - p2[1];
+    const lenSq = dx*dx + dy*dy;
+    edges.push({ i, lenSq, p1, p2 });
+  }
+
+  // Sort by length (ascending)
+  edges.sort((a, b) => a.lenSq - b.lenSq);
+
+  // Take the two shortest edges
+  const short1 = edges[0];
+  const short2 = edges[1];
+
+  // Calculate midpoints [lat, lng]
+  // GeoJSON is [lng, lat], Leaflet wants [lat, lng]
+  const m1 = [(short1.p1[1] + short1.p2[1]) / 2, (short1.p1[0] + short1.p2[0]) / 2];
+  const m2 = [(short2.p1[1] + short2.p2[1]) / 2, (short2.p1[0] + short2.p2[0]) / 2];
+
+  // Push the points slightly inward so the squares remain inside the table polygon
+  const center = [(m1[0] + m2[0]) / 2, (m1[1] + m2[1]) / 2];
+  const factor = 0.2;
+  const m1In = [m1[0] + (center[0] - m1[0]) * factor, m1[1] + (center[1] - m1[1]) * factor];
+  const m2In = [m2[0] + (center[0] - m2[0]) * factor, m2[1] + (center[1] - m2[1]) * factor];
+
+  return { start: m1In, end: m2In };
+};
+
+// Helper to create a small square polygon around a point
+const createSquare = (center, size) => {
+  const [lat, lng] = center;
+  // Convert degrees to meters roughly (1 deg lat ~ 111km)
+  // We want ~0.5m size. 0.5m is approx 0.0000045 degrees.
+  // Let's use a fixed small degree value for simplicity as projection varies.
+  // 0.000005 is roughly 0.5m.
+  const d = size / 2;
+  
+  // Return coordinates for a square polygon
+  return [
+    [lat - d, lng - d],
+    [lat + d, lng - d],
+    [lat + d, lng + d],
+    [lat - d, lng + d]
+  ];
+};
+
+export default function CableMap({ data, backgroundData, textData, invPointsData, plusMap, minusMap, selected, setSelected, mc4Status, onToggleMc4 }) {
   const [, _force] = useState(false);
   const setIsDragging = (v) => _force(v);
   const geoJsonRef = useRef(null);
@@ -197,6 +253,67 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
 
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
+
+  // Generate MC4 GeoJSON features
+  const mc4Features = React.useMemo(() => {
+    if (!data) return null;
+    const features = [];
+    data.features.forEach(f => {
+      const id = f.properties?.string_id;
+      if (!id) return;
+      const endpoints = getTableEndpoints(f);
+      if (!endpoints) return;
+
+      // Create square polygons (approx 0.000012 degrees ~ 1.2m)
+      const size = 0.000012;
+      
+      features.push({
+        type: "Feature",
+        properties: { id, position: 'start' },
+        geometry: {
+          type: "Polygon",
+          coordinates: [createSquare(endpoints.start, size).map(p => [p[1], p[0]])] // Swap back to [lng, lat] for GeoJSON
+        }
+      });
+
+      features.push({
+        type: "Feature",
+        properties: { id, position: 'end' },
+        geometry: {
+          type: "Polygon",
+          coordinates: [createSquare(endpoints.end, size).map(p => [p[1], p[0]])]
+        }
+      });
+    });
+    return { type: "FeatureCollection", features };
+  }, [data]);
+
+  // Ref for MC4 layer to update styles imperatively
+  const mc4LayerRef = useRef(null);
+
+  // Update MC4 styles when status changes
+  useEffect(() => {
+    if (!mc4LayerRef.current || !mc4Status) return;
+
+    mc4LayerRef.current.eachLayer(layer => {
+      const { id, position } = layer.feature.properties;
+      const status = mc4Status[id] || { start: false, end: false };
+      const isInstalled = status[position];
+
+      // Style update
+      if (isInstalled) {
+        layer.setStyle({ color: '#3b82f6', fillColor: '#3b82f6', weight: 1, fillOpacity: 1 });
+        if (layer.getTooltip()) {
+          layer.unbindTooltip();
+        }
+      } else {
+        layer.setStyle({ color: 'black', fillColor: 'black', weight: 1, fillOpacity: 1 });
+        if (layer.getTooltip()) {
+          layer.unbindTooltip();
+        }
+      }
+    });
+  }, [mc4Status]);
 
   /* ---------- Text Alignment Logic ---------- */
   useEffect(() => {
@@ -681,6 +798,25 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
           data={processedTextData} 
           style={textStyle} 
           pointToLayer={pointToLayerText}
+        />
+      )}
+      {mc4Features && (
+        <GeoJSON 
+          ref={mc4LayerRef}
+          data={mc4Features} 
+          style={{ color: 'black', fillColor: 'black', weight: 1, fillOpacity: 1 }}
+          bubblingMouseEvents={false}
+          onEachFeature={(feature, layer) => {
+            layer.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              if (e.originalEvent) {
+                e.originalEvent.preventDefault();
+                e.originalEvent.stopPropagation();
+              }
+              const { id, position } = feature.properties;
+              onToggleMc4(id, position);
+            });
+          }}
         />
       )}
       <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} />

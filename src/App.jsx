@@ -33,6 +33,10 @@ export default function App() {
   const [totalPlus, setTotalPlus] = useState(0);
   const [totalMinus, setTotalMinus] = useState(0);
 
+  // MC4 State
+  const [mc4Status, setMc4Status] = useState({}); // { "tableId": { start: bool, end: bool } }
+  const [mc4Stats, setMc4Stats] = useState({ total: 0, completed: 0 });
+
   // Modals
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
@@ -51,9 +55,11 @@ export default function App() {
         try { json = JSON.parse(txt); }
         catch { setErr("GeoJSON 404/HTML. public/tables.geojson yolunu kontrol et."); return; }
         if (Array.isArray(json.features)) {
+          let tableCount = 0;
           json.features.forEach((f) => {
             const rawId = f?.properties?.string_id || f?.properties?.text;
             f.properties.string_id = normalizeId(rawId);
+            if (f.properties.string_id) tableCount++;
 
             if (f.geometry?.type === "LineString" && Array.isArray(f.geometry.coordinates)) {
               const coords = f.geometry.coordinates;
@@ -67,6 +73,7 @@ export default function App() {
               }
             }
           });
+          setMc4Stats(prev => ({ ...prev, total: tableCount * 2 }));
         }
         setData(json);
       })
@@ -160,15 +167,33 @@ export default function App() {
     setIsResetOpen(false);
   };
 
+  const toggleMc4 = (tableId, position) => {
+    setMc4Status(prev => {
+      const currentTable = prev[tableId] || { start: false, end: false };
+      const newTable = { ...currentTable, [position]: !currentTable[position] };
+      return { ...prev, [tableId]: newTable };
+    });
+  };
+
+  useEffect(() => {
+    let completed = 0;
+    Object.values(mc4Status).forEach(status => {
+      if (status.start) completed++;
+      if (status.end) completed++;
+    });
+    setMc4Stats(prev => ({ ...prev, completed }));
+  }, [mc4Status]);
+
   if (err) return <div style={{ padding:16, color:"#b91c1c", background:"#fee2e2" }}>❌ {err}</div>;
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0b1020" }}>
-      <ProgressStats 
-        totalPlus={totalPlus} 
-        totalMinus={totalMinus} 
+      <ProgressStats
+        totalPlus={totalPlus}
+        totalMinus={totalMinus}
+        mc4Stats={mc4Stats}
         onReset={() => setIsResetOpen(true)}
-        onExport={() => exportToExcel(dailyLog)}
+        onExport={exportToExcel}
         onSubmitDaily={() => setIsSubmitOpen(true)}
       />
 
@@ -181,7 +206,9 @@ export default function App() {
           plusMap={plusMap} 
           minusMap={minusMap} 
           selected={selected} 
-          setSelected={setSelected} 
+          setSelected={setSelected}
+          mc4Status={mc4Status}
+          onToggleMc4={toggleMc4}
         />
       </div>
 
