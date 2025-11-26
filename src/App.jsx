@@ -69,10 +69,12 @@ export default function App() {
 
   // MC4 State
   const [mc4Status, setMc4Status] = useState({}); // { "tableId": { start: bool, end: bool } }
+  const [mc4Pending, setMc4Pending] = useState({}); // { "tableId:position": true }
   const [mc4Stats, setMc4Stats] = useState({ total: 0, completed: 0 });
 
   // Mode toggles
   const [activeModes, setActiveModes] = useState({ dc: true, mc4: false });
+  const [currentWorkMode, setCurrentWorkMode] = useState("dc");
 
   // Modals
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
@@ -199,11 +201,30 @@ export default function App() {
 
   const handleDailySubmit = (record) => {
     addRecord(record);
-    setSelected(new Set()); // Clear selection after submit
+    if (record.mode === "mc4") {
+      setMc4Pending({});
+    } else {
+      setSelected(new Set());
+    }
   };
 
   const toggleMode = (mode) => {
-    setActiveModes(prev => ({ ...prev, [mode]: !prev[mode] }));
+    setActiveModes(prev => {
+      const nextValue = !prev[mode];
+      const nextModes = { ...prev, [mode]: nextValue };
+
+      setCurrentWorkMode((current) => {
+        if (nextValue) return mode;
+        if (current === mode) {
+          if (nextModes.dc) return "dc";
+          if (nextModes.mc4) return "mc4";
+          return "dc";
+        }
+        return current;
+      });
+
+      return nextModes;
+    });
   };
 
   const handleResetAll = () => {
@@ -214,6 +235,7 @@ export default function App() {
     if (activeModes.mc4) {
       setMc4Status({});
     }
+    setMc4Pending({});
     setIsResetOpen(false);
   };
 
@@ -221,8 +243,24 @@ export default function App() {
     setMc4Status(prev => {
       const currentTable = prev[tableId] || { start: false, end: false };
       const nextValue = typeof value === "boolean" ? value : !currentTable[position];
+      if (currentTable[position] === nextValue) {
+        return prev;
+      }
       const newTable = { ...currentTable, [position]: nextValue };
-      return { ...prev, [tableId]: newTable };
+      const updated = { ...prev, [tableId]: newTable };
+
+      setMc4Pending((pending) => {
+        const key = `${tableId}:${position}`;
+        const nextPending = { ...pending };
+        if (nextValue) {
+          nextPending[key] = true;
+        } else {
+          delete nextPending[key];
+        }
+        return nextPending;
+      });
+
+      return updated;
     });
   };
 
@@ -237,10 +275,15 @@ export default function App() {
 
   useEffect(() => {
     const handleKey = (e) => {
-      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "z") {
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      const key = e.key?.toLowerCase();
+
+      if (!isCmdOrCtrl) return;
+
+      if (!e.shiftKey && key === "z") {
         e.preventDefault();
         undoSelected();
-      } else if ((e.ctrlKey && e.key.toLowerCase() === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
+      } else if (key === "y" || (e.shiftKey && key === "z")) {
         e.preventDefault();
         redoSelected();
       }
@@ -248,6 +291,22 @@ export default function App() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [undoSelected, redoSelected]);
+
+  const mc4PendingCount = Object.keys(mc4Pending).length;
+  const dailyDcLength = totalPlus + totalMinus;
+  const workContext = currentWorkMode === "mc4"
+    ? {
+        mode: "mc4",
+        value: mc4PendingCount,
+        unit: "pcs",
+        title: "Daily Installed MC4"
+      }
+    : {
+        mode: "dc",
+        value: dailyDcLength,
+        unit: "m",
+        title: "Daily Installed Length"
+      };
 
   if (err) return <div style={{ padding:16, color:"#b91c1c", background:"#fee2e2" }}>❌ {err}</div>;
 
@@ -261,7 +320,7 @@ export default function App() {
         activeModes={activeModes}
         onToggleMode={toggleMode}
         onReset={() => setIsResetOpen(true)}
-        onExport={exportToExcel}
+        onExport={() => exportToExcel(dailyLog, currentWorkMode)}
         onSubmitDaily={() => setIsSubmitOpen(true)}
         onUndoSelection={undoSelected}
         onRedoSelection={redoSelected}
@@ -290,7 +349,7 @@ export default function App() {
         isOpen={isSubmitOpen} 
         onClose={() => setIsSubmitOpen(false)} 
         onSubmit={handleDailySubmit}
-        dailyLength={totalPlus + totalMinus}
+        workContext={workContext}
       />
 
       <ConfirmationModal 

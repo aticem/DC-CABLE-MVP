@@ -71,15 +71,8 @@ function ZoomHandler() {
       const size = 30 * Math.pow(2, zoom - 21);
       const container = map.getContainer();
       
-      // Font size scaling
+      // Font size scales with zoom; keep labels always visible
       container.style.setProperty('--label-font-size', `${size}px`);
-      
-      // Visibility toggle (Zoom < 17 hides labels)
-      if (zoom < 17) {
-        container.classList.add('hide-labels');
-      } else {
-        container.classList.remove('hide-labels');
-      }
     };
     map.on("zoom", update);
     update();
@@ -265,6 +258,49 @@ const createSquare = (center, size) => {
     [lat + d, lng + d],
     [lat - d, lng + d]
   ];
+};
+ 
+const getAngleFromPoints = (points = []) => {
+  if (points.length < 2) return 0;
+  let maxLenSq = 0;
+  let bestEdge = [points[0], points[1]];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const lat = p1[1];
+    const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
+    const dy = p2[1] - p1[1];
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq > maxLenSq) {
+      maxLenSq = lenSq;
+      bestEdge = [p1, p2];
+    }
+  }
+
+  const [p1, p2] = bestEdge;
+  const lat = p1[1];
+  const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
+  const dy = p2[1] - p1[1];
+  let angle = -1 * (Math.atan2(dy, dx) * 180) / Math.PI;
+
+  if (angle > 90) angle -= 180;
+  if (angle < -90) angle += 180;
+  return angle;
+};
+
+const getFeatureAngle = (geometry) => {
+  if (!geometry) return 0;
+  if (geometry.type === "Polygon" && geometry.coordinates?.length) {
+    return getAngleFromPoints(geometry.coordinates[0]);
+  }
+  if (geometry.type === "MultiPolygon" && geometry.coordinates?.length) {
+    return getAngleFromPoints(geometry.coordinates[0]?.[0] || []);
+  }
+  if (geometry.type === "LineString" && geometry.coordinates?.length) {
+    return getAngleFromPoints(geometry.coordinates);
+  }
+  return 0;
 };
 
 export default function CableMap({ data, backgroundData, textData, invPointsData, plusMap, minusMap, selected, setSelected, mc4Status, onToggleMc4, activeModes }) {
@@ -664,35 +700,6 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
         if (newStyle.weight === 3) {
             layer.bringToFront();
         }
-
-        // Handle tooltip visibility for highlighted items
-        const id = feature.properties?.string_id;
-        let isHighlighted = false;
-        if (id && highlightedInverters.size > 0) {
-          for (const inv of highlightedInverters) {
-            const normalizedInv = inv.replace(/\s+/g, "");
-            // Match exact inverter prefix (e.g. "TX6-INV2-")
-            if (id.startsWith(normalizedInv + "-")) {
-              isHighlighted = true;
-              break;
-            }
-          }
-        }
-
-        const tooltip = layer.getTooltip();
-        if (tooltip) {
-            const content = tooltip.getContent();
-            const isPermanent = tooltip.options.permanent;
-            
-            if (isHighlighted && !isPermanent) {
-                layer.unbindTooltip();
-                layer.bindTooltip(content, { permanent: true, direction: "center", className: "table-label" });
-            } else if (!isHighlighted && isPermanent) {
-                layer.unbindTooltip();
-                layer.bindTooltip(content, { permanent: false, direction: "center", className: "table-label" });
-                layer.closeTooltip();
-            }
-        }
       }
     });
   }, [selected, plusMap, minusMap, highlightedInverters]);
@@ -701,47 +708,13 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
   const onEach = (feature, layer) => {
     const id = feature.properties?.string_id || "No ID";
 
-    // Calculate rotation angle
-    let angle = 0;
-    const geom = feature.geometry;
-    let points = [];
-    if (geom?.type === "Polygon" && geom.coordinates?.length > 0) {
-      points = geom.coordinates[0];
-    } else if (geom?.type === "LineString") {
-      points = geom.coordinates;
-    }
-
-    if (points.length >= 2) {
-      let maxLenSq = 0;
-      let bestEdge = [points[0], points[1]];
-
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const lat = p1[1];
-        const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
-        const dy = p2[1] - p1[1];
-        const lenSq = dx * dx + dy * dy;
-        if (lenSq > maxLenSq) {
-          maxLenSq = lenSq;
-          bestEdge = [p1, p2];
-        }
-      }
-
-      const [p1, p2] = bestEdge;
-      const lat = p1[1];
-      const dx = (p2[0] - p1[0]) * Math.cos(lat * Math.PI / 180);
-      const dy = p2[1] - p1[1];
-      angle = -1 * (Math.atan2(dy, dx) * 180) / Math.PI;
-    }
-
-    if (angle > 90) angle -= 180;
-    if (angle < -90) angle += 180;
+    const angle = getFeatureAngle(feature.geometry);
 
     layer.bindTooltip(
       `<div style="transform: rotate(${angle.toFixed(2)}deg); transform-origin: center;">${id}</div>`,
       { 
-        permanent: false, 
+        permanent: true,
+        interactive: false,
         direction: "center", 
         className: "table-label" 
       }
@@ -793,14 +766,6 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
 
   return (
     <>
-    <style>{`
-      .hide-labels .custom-text-label,
-      .hide-labels .table-label {
-        opacity: 0 !important;
-        pointer-events: none;
-        transition: opacity 0.2s;
-      }
-    `}</style>
     <MapContainer
       style={{ height: "100%", width: "100%", background: "#ffffff" }}
       preferCanvas={true}

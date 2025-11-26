@@ -3,24 +3,39 @@ import { saveAs } from 'file-saver';
 import Chart from 'chart.js/auto';
 
 export function useChartExport() {
-  const exportToExcel = async (dailyLog) => {
+  const exportToExcel = async (dailyLog, mode = "dc") => {
     if (!dailyLog || dailyLog.length === 0) {
       alert("No data to export!");
       return;
     }
 
+    const normalizedMode = mode === "mc4" ? "mc4" : "dc";
+    const filteredLog = dailyLog.filter(entry => (entry.mode || "dc") === normalizedMode);
+
+    if (filteredLog.length === 0) {
+      alert(`No ${normalizedMode.toUpperCase()} records to export!`);
+      return;
+    }
+
     // 1. Aggregate Data
     // Sort by date
-    const sortedLog = [...dailyLog].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sortedLog = [...filteredLog].sort((a, b) => new Date(a.date) - new Date(b.date));
     
     // 2. Prepare Chart Data
     const labels = sortedLog.map(l => l.date);
-    const dataValues = sortedLog.map(l => l.installed_length);
+    const dataValues = sortedLog.map(l => {
+      if (typeof l.value === "number") return l.value;
+      if (typeof l.installed_length === "number") return l.installed_length;
+      return 0;
+    });
     const subLabels = sortedLog.map(l => {
         const sub = l.subcontractor ? l.subcontractor.slice(0, 3).toUpperCase() : "";
         const workers = l.workers || 0;
         return `${sub}-${workers}`; // e.g. BZ-23
     });
+
+    const datasetLabel = normalizedMode === "mc4" ? "Daily MC4 Progress (pcs)" : "Daily Progress (m)";
+    const axisLabel = normalizedMode === "mc4" ? "MC4 Installation (pcs)" : "DC Cable Pulling (m)";
 
     // 3. Draw Chart
     const canvas = document.getElementById('dailyChart');
@@ -38,7 +53,7 @@ export function useChartExport() {
       data: {
         labels: labels,
         datasets: [{
-          label: 'Daily Progress (m)',
+          label: datasetLabel,
           data: dataValues,
           backgroundColor: '#3b82f6',
           borderColor: '#1d4ed8',
@@ -57,7 +72,7 @@ export function useChartExport() {
               beginAtZero: true,
               title: {
                 display: true,
-                text: 'DC Cable Pulling (m)',
+                text: axisLabel,
                 font: {
                   weight: 'bold'
                 }
@@ -100,11 +115,20 @@ export function useChartExport() {
       { header: 'Date', key: 'date', width: 15 },
       { header: 'Subcontractor', key: 'subcontractor', width: 20 },
       { header: 'Workers', key: 'workers', width: 10 },
-      { header: 'Installed Length (m)', key: 'installed_length', width: 20 },
+      { header: normalizedMode === 'mc4' ? 'Installed MC4 (pcs)' : 'Installed Length (m)', key: 'value', width: 20 },
     ];
 
     sortedLog.forEach(record => {
-      sheet1.addRow(record);
+      const rowValue = typeof record.value === "number"
+        ? record.value
+        : (typeof record.installed_length === "number" ? record.installed_length : 0);
+
+      sheet1.addRow({
+        date: record.date,
+        subcontractor: record.subcontractor,
+        workers: record.workers,
+        value: rowValue,
+      });
     });
 
     // Sheet 2: Image
@@ -121,7 +145,7 @@ export function useChartExport() {
     // 5. Download
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Daily_Progress_${new Date().toISOString().split('T')[0]}.xlsx`);
+    saveAs(blob, `Daily_${normalizedMode.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`);
     
     // Cleanup
     chart.destroy();

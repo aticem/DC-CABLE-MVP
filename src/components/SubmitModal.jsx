@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 
-export default function SubmitModal({ isOpen, onClose, onSubmit, dailyLength }) {
+export default function SubmitModal({ isOpen, onClose, onSubmit, workContext }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [subcontractor, setSubcontractor] = useState("");
   const [workers, setWorkers] = useState(0);
+  const currentContext = workContext || { title: "Daily Installed Length", value: 0, unit: "m", mode: "dc" };
+  const safeValue = typeof currentContext.value === "number" ? currentContext.value : 0;
+  const safeUnit = currentContext.unit || (currentContext.mode === "mc4" ? "pcs" : "m");
 
   if (!isOpen) return null;
 
@@ -13,12 +16,19 @@ export default function SubmitModal({ isOpen, onClose, onSubmit, dailyLength }) 
       date,
       subcontractor,
       workers: parseInt(workers, 10),
-      installed_length: dailyLength
+      mode: currentContext.mode,
+      value: safeValue,
+      unit: safeUnit,
+      installed_length: currentContext.mode === "dc" ? safeValue : 0
     });
     onClose();
     setSubcontractor("");
     setWorkers(0);
   };
+
+  const formattedValue = currentContext.mode === "mc4"
+    ? safeValue.toFixed(0)
+    : safeValue.toFixed(2);
 
   return (
     <div style={{
@@ -65,8 +75,10 @@ export default function SubmitModal({ isOpen, onClose, onSubmit, dailyLength }) 
         </div>
 
         <div style={{ marginBottom: '24px', padding: '12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-          <div style={{ fontSize: '0.85rem', color: '#86efac' }}>Daily Installed Length</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#22c55e' }}>{dailyLength.toFixed(2)} m</div>
+          <div style={{ fontSize: '0.85rem', color: '#86efac' }}>{currentContext.title}</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#22c55e' }}>
+            {formattedValue} {safeUnit}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

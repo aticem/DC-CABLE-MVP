@@ -19,6 +19,7 @@ export default function ProgressStats({
   const mc4Percent = mc4Total > 0 ? ((mc4Completed / mc4Total) * 100).toFixed(1) : 0;
   const dcCompleted = totalPlus + totalMinus;
   const dcPercent = totalFieldLength > 0 ? ((dcCompleted / totalFieldLength) * 100).toFixed(1) : 0;
+  const headerTextColor = "#f8fafc";
 
   const statBoxStyle = {
     display: "flex",
@@ -41,16 +42,11 @@ export default function ProgressStats({
     padding: "8px 14px",
     borderRadius: "6px",
     cursor: "pointer",
-    fontWeight: 600,
     fontSize: "0.9rem",
     transition: "background 0.2s, transform 0.1s",
     display: "flex",
     alignItems: "center",
     justifyContent: "center"
-  };
-
-  const handleButtonHover = (e, hovering) => {
-    e.currentTarget.style.background = hovering ? "#14406d" : "#0b2644";
   };
 
   return (
@@ -101,7 +97,7 @@ export default function ProgressStats({
             display: "inline-flex",
             alignItems: "center",
             gap: "4px",
-            color: activeModes?.dc ? "#ffffff" : "#cbd5f5",
+            color: headerTextColor,
             fontWeight: 700,
             fontSize: "0.85rem",
             cursor: "pointer",
@@ -118,19 +114,19 @@ export default function ProgressStats({
           </label>
 
           <div style={statBoxStyle}>
-            <span style={{ color: "#cbd5f5" }}>∑:</span>
+            <span style={{ color: headerTextColor }}>∑:</span>
             <span>{totalFieldLength.toFixed(2)} m</span>
           </div>
           <div style={{ ...statBoxStyle, flexDirection: "column", alignItems: "flex-start", fontSize: "0.7rem" }}>
-            <span style={{ color: "#cbd5f5" }}>+ DC Cable: {totalPlus.toFixed(2)} m</span>
-            <span style={{ color: "#cbd5f5" }}>- DC Cable: {totalMinus.toFixed(2)} m</span>
+            <span style={{ color: headerTextColor }}>+ DC Cable: {totalPlus.toFixed(2)} m</span>
+            <span style={{ color: headerTextColor }}>- DC Cable: {totalMinus.toFixed(2)} m</span>
           </div>
           <div style={statBoxStyle}>
-            <span style={{ color: "#cbd5f5" }}>Done:</span>
+            <span style={{ color: headerTextColor }}>Done:</span>
             <span style={{ color: "#16a34a" }}>{dcCompleted.toFixed(2)} m ({dcPercent}%)</span>
           </div>
           <div style={statBoxStyle}>
-            <span style={{ color: "#cbd5f5" }}>Remaining:</span>
+            <span style={{ color: headerTextColor }}>Remaining:</span>
             <span style={{ color: "#dc2626" }}>{(totalFieldLength - dcCompleted).toFixed(2)} m</span>
           </div>
         </div>
@@ -141,7 +137,7 @@ export default function ProgressStats({
           fontWeight: 700,
           fontSize: "0.9rem",
           letterSpacing: "0.25px",
-          color: "#f1f5f9",
+          color: headerTextColor,
           alignSelf: "center",
           paddingTop: "0",
           transform: "translateY(10px)"
@@ -207,7 +203,7 @@ export default function ProgressStats({
             display: "inline-flex",
             alignItems: "center",
             gap: "4px",
-            color: activeModes?.mc4 ? "#ffffff" : "#cbd5f5",
+            color: headerTextColor,
             fontWeight: 700,
             fontSize: "0.85rem",
             cursor: "pointer",
@@ -224,15 +220,15 @@ export default function ProgressStats({
           </label>
 
           <div style={statBoxStyle}>
-            <span style={{ color: "#cbd5f5" }}>∑:</span>
+            <span style={{ color: headerTextColor }}>∑:</span>
             <span>{mc4Total}</span>
           </div>
           <div style={statBoxStyle}>
-            <span style={{ color: "#cbd5f5" }}>Done:</span>
+            <span style={{ color: headerTextColor }}>Done:</span>
             <span style={{ color: "#16a34a" }}>{mc4Completed} ({mc4Percent}%)</span>
           </div>
           <div style={statBoxStyle}>
-            <span style={{ color: "#cbd5f5" }}>Remaining:</span>
+            <span style={{ color: headerTextColor }}>Remaining:</span>
             <span style={{ color: "#dc2626" }}>{mc4Remaining}</span>
           </div>
         </div>
