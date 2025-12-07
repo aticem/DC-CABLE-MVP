@@ -704,21 +704,17 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
     });
   }, [selected, plusMap, minusMap, highlightedInverters]);
 
-  /* layer event’leri */
+  /* layer event'leri */
   const onEach = (feature, layer) => {
     const id = feature.properties?.string_id || "No ID";
 
-    const angle = getFeatureAngle(feature.geometry);
-
-    layer.bindTooltip(
-      `<div style="transform: rotate(${angle.toFixed(2)}deg); transform-origin: center;">${id}</div>`,
-      { 
-        permanent: true,
-        interactive: false,
-        direction: "center", 
-        className: "table-label" 
-      }
-    );
+    layer.bindTooltip(id, { 
+      permanent: false,
+      sticky: true,
+      direction: "top", 
+      offset: [0, -10],
+      className: "table-label" 
+    });
 
     layer.on("click", (e) => {
       const modes = modeRef.current || {};
@@ -817,7 +813,7 @@ export default function CableMap({ data, backgroundData, textData, invPointsData
           pointToLayer={pointToLayerText}
         />
       )}
-      <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} />
+      <GeoJSON ref={geoJsonRef} data={data} style={style} onEachFeature={onEach} smoothFactor={1} interactive={true} />
       {mc4Features && (
         <GeoJSON
           key={mc4StatusKey}

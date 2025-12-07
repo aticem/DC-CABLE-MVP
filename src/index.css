@@ -1,20 +1,19 @@
 html, body, #root { height: 100%; margin: 0; padding: 0; }
 .leaflet-container { background: #0b1020; }
 
-/* Table labels */
+/* Table labels - hover tooltip */
 .table-label {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #fff;
-  font-size: var(--label-font-size, 10px);
+  background: rgba(0, 0, 0, 0.85) !important;
+  border: 1px solid #fbbf24 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
+  color: #fbbf24 !important;
+  font-size: 12px !important;
   font-weight: bold;
   text-align: center;
-  text-shadow: 0 0 2px #000;
-  pointer-events: none;
+  text-shadow: none;
+  padding: 4px 8px !important;
   white-space: nowrap;
-  margin: 0 !important;
-  padding: 0 !important;
 }
 
 .leaflet-tooltip-top:before,
